@@ -2,11 +2,18 @@ import requests
 from bs4 import BeautifulSoup
 import schedule
 import time
+from flask import Flask, jsonify
+import threading
+
+app = Flask(__name__)
 
 # Make.com Webhook URL
 WEBHOOK_URL = 'https://hook.us2.make.com/8ng1v9fw7x63kfsrw4siix8a7jdyybqi'  # Replace with your actual webhook URL
 
+leaderboard_data = []
+
 def scrape_leaderboard():
+    global leaderboard_data
     url = 'https://kolscan.io/leaderboard'
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
@@ -18,7 +25,6 @@ def scrape_leaderboard():
         return
 
     soup = BeautifulSoup(response.text, 'html.parser')
-
     leaderboard = []
     entries = soup.select('.leaderboard_leaderboardUser__8OZpJ')
 
@@ -48,10 +54,8 @@ def scrape_leaderboard():
             "dollarAmount": dollar_amount.text.replace('($)', '').strip() if dollar_amount else "0"
         })
 
-    # Debugging: Print sample data
-    print("🔹 Sample Data Extracted:")
-    print(leaderboard[:3])  # Print first 3 entries for verification
-
+    leaderboard_data = leaderboard
+    
     # Send extracted data to Make.com webhook
     try:
         response = requests.post(WEBHOOK_URL, json={"leaderboard": leaderboard})
@@ -59,14 +63,21 @@ def scrape_leaderboard():
     except requests.exceptions.RequestException as e:
         print('❌ Failed to send data:', e)
 
-scrape_leaderboard()
-
 # Schedule the scraper to run every 6 hours
 schedule.every(6).hours.do(scrape_leaderboard)
 
-print("📅 Scheduler started. Scraper will run every 6 hours.")
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(60)  # Check the schedule every minute
 
-# Keep the script running indefinitely
-while True:
-    schedule.run_pending()
-    time.sleep(60)  # Check the schedule every minute
+# Start scheduler in a background thread
+threading.Thread(target=run_scheduler, daemon=True).start()
+
+@app.route('/scrape', methods=['GET'])
+def manual_scrape():
+    scrape_leaderboard()
+    return jsonify({"message": "Scraping triggered!", "data": leaderboard_data})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)  # Use Render's assigned PORT
