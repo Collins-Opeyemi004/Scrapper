@@ -74,6 +74,10 @@ def run_scheduler():
 # Start scheduler in a background thread
 threading.Thread(target=run_scheduler, daemon=True).start()
 
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({"message": "Welcome to your scraping API! Add /scrape to the domain to trigger scraping."})
+
 @app.route('/scrape', methods=['GET'])
 def manual_scrape():
     scrape_leaderboard()
